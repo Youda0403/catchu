@@ -423,6 +423,9 @@ summary {
   font-size: 11px;
   gap: 8px;
 }
+.quality-row + .quality-row {
+  margin-top: 10px;
+}
 .quality-row select {
   border: 0;
   background: #f6f0e9;
