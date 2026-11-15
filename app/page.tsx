@@ -25,13 +25,15 @@ export default function Home() {
     [progress, setProgress] = useState<number | null>(null),
     [error, setError] = useState(""),
     [quality, setQuality] = useState(480),
+    [transparent, setTransparent] = useState(false),
+    [shadow, setShadow] = useState(true),
     [download, setDownload] = useState("");
   const canvas = useRef<HTMLCanvasElement>(null),
     worker = useRef<Worker | null>(null),
     downloadRef = useRef(""),
     busy = useRef(false),
     uploading = useRef(false);
-  const scene: Scene = { photos, theme, title, message, outcome, pileSeed, pileCount, pickSeed };
+  const scene: Scene = { photos, theme, title, message, outcome, pileSeed, pileCount, pickSeed, transparent, shadow };
   const sceneRef = useRef(scene);
   sceneRef.current = scene;
   const disabled = progress !== null;
@@ -51,7 +53,7 @@ export default function Home() {
     };
     frame = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frame);
-  }, [playing, photos, theme, title, message, outcome, pileSeed, pileCount, pickSeed]);
+  }, [playing, photos, theme, title, message, outcome, pileSeed, pileCount, pickSeed, transparent, shadow]);
   useEffect(
     () => () => {
       worker.current?.terminate();
@@ -189,7 +191,10 @@ export default function Home() {
         renderScene(sampleCtx, frozen, time);
         samples.set(sampleCtx.getImageData(0, 0, 240, 320).data, i * 240 * 320 * 4);
       });
-      w.postMessage({ type: "start", data: samples.buffer }, [samples.buffer]);
+      w.postMessage(
+        { type: "start", data: samples.buffer, transparent: !!frozen.transparent },
+        [samples.buffer],
+      );
     } catch {
       cancel();
       setError("GIF를 준비하지 못했어요. 새로고침 후 다시 시도해 주세요.");
@@ -225,6 +230,14 @@ export default function Home() {
               width={480}
               height={640}
               aria-label="사진이 들어가는 인형뽑기 기계"
+              style={
+                transparent
+                  ? {
+                      background:
+                        "repeating-conic-gradient(#e9e2d8 0% 25%, #faf6ee 0% 50%) 0 0 / 20px 20px",
+                    }
+                  : undefined
+              }
             />
           </div>
           <div className="preview-actions">
@@ -517,6 +530,36 @@ export default function Home() {
                 <option value={720}>고화질 · 720 × 960</option>
               </select>
             </div>
+            <div className="quality-row">
+              <label htmlFor="transparent">배경</label>
+              <select
+                id="transparent"
+                value={transparent ? "transparent" : "paper"}
+                onChange={(e) => {
+                  clearDownload();
+                  setTransparent(e.target.value === "transparent");
+                }}
+              >
+                <option value="paper">기본 배경</option>
+                <option value="transparent">투명 · 기계만</option>
+              </select>
+            </div>
+            {transparent && (
+              <div className="quality-row">
+                <label htmlFor="shadow">바닥 그림자</label>
+                <select
+                  id="shadow"
+                  value={shadow ? "keep" : "remove"}
+                  onChange={(e) => {
+                    clearDownload();
+                    setShadow(e.target.value === "keep");
+                  }}
+                >
+                  <option value="keep">남기기</option>
+                  <option value="remove">없애기</option>
+                </select>
+              </div>
+            )}
           </fieldset>
           <button
             className="export-button"

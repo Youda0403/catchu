@@ -1,6 +1,8 @@
 import { GIFEncoder, quantize } from "gifenc";
 let encoder: ReturnType<typeof GIFEncoder> | null = null;
 let palette: number[][] | null = null;
+// Palette slot reserved for see-through pixels, or -1 for an opaque GIF.
+let transparentIndex = -1;
 // Colour cache, keyed by 5-6-5 bucket: the exact colour that owns each bucket
 // and the palette index it resolved to, with every other colour that lands in
 // an owned bucket kept in `spill`.
@@ -18,7 +20,8 @@ function nearest(r: number, g: number, b: number) {
   const colors = palette!;
   let best = 0,
     bestDistance = Infinity;
-  for (let i = 0; i < colors.length; i++) {
+  const count = transparentIndex < 0 ? colors.length : transparentIndex;
+  for (let i = 0; i < count; i++) {
     const color = colors[i];
     const dr = color[0] - r,
       dg = color[1] - g,
@@ -44,6 +47,11 @@ function indexFrame(rgba: Uint8Array, pixels: number) {
     extra = spill!;
   const index = new Uint8Array(pixels);
   for (let p = 0, q = 0; p < pixels; p++, q += 4) {
+    // GIF transparency is on/off: mostly see-through pixels are dropped.
+    if (transparentIndex >= 0 && rgba[q + 3] < 128) {
+      index[p] = transparentIndex;
+      continue;
+    }
     const r = rgba[q],
       g = rgba[q + 1],
       b = rgba[q + 2];
@@ -71,10 +79,26 @@ function indexFrame(rgba: Uint8Array, pixels: number) {
 
 self.onmessage = (event: MessageEvent) => {
   try {
-    const { type, data, width, height, delay } = event.data;
+    const { type, data, width, height, delay, transparent } = event.data;
     if (type === "start") {
       encoder = GIFEncoder();
-      palette = quantize(new Uint8Array(data), 256);
+      if (transparent) {
+        // Quantize only the visible pixels and keep the last slot free.
+        const all = new Uint8Array(data);
+        const visible = new Uint8Array(all.length);
+        let length = 0;
+        for (let q = 0; q < all.length; q += 4)
+          if (all[q + 3] >= 128) {
+            visible.set(all.subarray(q, q + 4), length);
+            length += 4;
+          }
+        palette = quantize(visible.subarray(0, length), 255);
+        transparentIndex = palette.length;
+        palette.push([0, 0, 0]);
+      } else {
+        palette = quantize(new Uint8Array(data), 256);
+        transparentIndex = -1;
+      }
       resetCache();
       self.postMessage({ type: "ready" });
     }
@@ -86,6 +110,9 @@ self.onmessage = (event: MessageEvent) => {
         palette,
         delay: delay ?? 40,
         repeat: 0,
+        ...(transparentIndex >= 0
+          ? { transparent: true, transparentIndex, dispose: 2 }
+          : {}),
       });
       self.postMessage({ type: "frame" });
     }

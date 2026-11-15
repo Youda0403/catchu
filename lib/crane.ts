@@ -54,6 +54,8 @@ export type Scene = {
   pileSeed?: number;
   pileCount?: number;
   pickSeed?: number;
+  transparent?: boolean;
+  shadow?: boolean;
 };
 export const DURATION = 6800;
 const mix = (a: number, b: number, t: number) =>
@@ -236,20 +238,28 @@ export function renderScene(
     ctx.fill();
     ctx.restore();
   };
-  ctx.fillStyle = "#faf6ee";
-  ctx.fillRect(0, 0, 480, 640);
-  ctx.fillStyle = theme.light;
-  for (let y = 12; y < 640; y += 24)
-    for (let x = 12; x < 480; x += 24) {
-      ctx.beginPath();
-      ctx.arc(x, y, 1.5, 0, 7);
-      ctx.fill();
-    }
-  text("A LITTLE LUCK, A LOT OF LOVE", 240, 30, 10, theme.dark);
-  ctx.fillStyle = "#dfd2c6";
-  ctx.beginPath();
-  ctx.ellipse(240, 603, 182, 13, 0, 0, 7);
-  ctx.fill();
+  // Transparent export keeps only the machine (and optionally its floor
+  // shadow): the backdrop, dot pattern and both captions are left out.
+  const transparent = !!scene.transparent;
+  if (transparent) ctx.clearRect(0, 0, 480, 640);
+  else {
+    ctx.fillStyle = "#faf6ee";
+    ctx.fillRect(0, 0, 480, 640);
+    ctx.fillStyle = theme.light;
+    for (let y = 12; y < 640; y += 24)
+      for (let x = 12; x < 480; x += 24) {
+        ctx.beginPath();
+        ctx.arc(x, y, 1.5, 0, 7);
+        ctx.fill();
+      }
+    text("A LITTLE LUCK, A LOT OF LOVE", 240, 30, 10, theme.dark);
+  }
+  if (!transparent || scene.shadow !== false) {
+    ctx.fillStyle = "#dfd2c6";
+    ctx.beginPath();
+    ctx.ellipse(240, 603, 182, 13, 0, 0, 7);
+    ctx.fill();
+  }
   box(91, 576, 39, 24, 8, theme.dark);
   box(350, 576, 39, 24, 8, theme.dark);
   box(58, 54, 372, 537, 29, theme.dark);
@@ -435,7 +445,7 @@ export function renderScene(
     ctx.fillStyle = "#332d3b55";
     ctx.fillRect(250, 567, 127, 6);
   }
-  text("CATCHU!  /  POCKET ARCADE", 240, 625, 9, theme.dark);
+  if (!transparent) text("CATCHU!  /  POCKET ARCADE", 240, 625, 9, theme.dark);
   if (p.result) {
     const elapsed = (time - 4550) / 1000;
     const pop = Math.min(1, elapsed / 0.45);
@@ -446,6 +456,8 @@ export function renderScene(
     const size = (1 + Math.sin(pop * Math.PI) * 0.24) * exitScale;
     if (failed) {
       ctx.save();
+      // On a transparent backdrop, tint only what is already drawn.
+      if (transparent) ctx.globalCompositeOperation = "source-atop";
       const gloom = ctx.createLinearGradient(0, 0, 0, 640);
       gloom.addColorStop(0, "#344f89");
       gloom.addColorStop(1, "#a4bfdf");
